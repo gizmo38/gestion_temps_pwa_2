@@ -6,6 +6,7 @@ import {
   formatDateISO,
   formatDateLong,
   getNumeroSemaine,
+  getSemaineId,
   getJourSemaine,
   calculerTotalJournee,
   minutesEnHeures,
@@ -16,7 +17,15 @@ import {
   JOURS_LABELS,
   PLANNING_DEFAULT,
 } from "../lib/utils";
-import { getJournee, saveJournee, getPlanningDefault } from "../lib/storage";
+import {
+  getJournee,
+  saveJournee,
+  getPlanningSauvegardes,
+  getAssociationSemaine,
+  saveAssociationSemaine,
+  getPlanningPourSemaine,
+} from "../lib/storage";
+import { PlanningDefault } from "../lib/types";
 
 export default function SaisieTab() {
   // Date sélectionnée
@@ -36,13 +45,39 @@ export default function SaisieTab() {
     type: "success" | "error";
   } | null>(null);
 
-  // Planning par défaut
-  const [planning, setPlanning] = useState(PLANNING_DEFAULT);
+  // Planning de la semaine
+  const [planning, setPlanning] = useState<PlanningDefault>(PLANNING_DEFAULT);
+  const [planningsDisponibles, setPlanningsDisponibles] = useState<
+    Record<string, PlanningDefault>
+  >({});
+  const [planningSelectionne, setPlanningSelectionne] = useState<string>("default");
 
-  // Charger le planning au montage
+  // Identifiant de la semaine courante
+  const semaineId = getSemaineId(dateSelectionnee);
+
+  // Charger les plannings disponibles au montage
   useEffect(() => {
-    setPlanning(getPlanningDefault());
+    setPlanningsDisponibles(getPlanningSauvegardes());
   }, []);
+
+  // Charger le planning de la semaine quand la date change
+  useEffect(() => {
+    const association = getAssociationSemaine(semaineId);
+    setPlanningSelectionne(association || "default");
+    setPlanning(getPlanningPourSemaine(semaineId));
+  }, [semaineId]);
+
+  // Changer le planning de la semaine
+  const changerPlanningSemaine = (nomPlanning: string) => {
+    saveAssociationSemaine(semaineId, nomPlanning);
+    setPlanningSelectionne(nomPlanning);
+    setPlanning(getPlanningPourSemaine(semaineId));
+    setMessage({
+      text: `Planning "${nomPlanning === "default" ? "par défaut" : nomPlanning}" appliqué à la semaine ${getNumeroSemaine(dateSelectionnee)}`,
+      type: "success",
+    });
+    setTimeout(() => setMessage(null), 3000);
+  };
 
   // Charger les horaires quand la date change
   useEffect(() => {
@@ -295,6 +330,32 @@ export default function SaisieTab() {
                 S{getNumeroSemaine(dateSelectionnee)}
               </span>
             </h3>
+
+            {/* Sélecteur de planning pour la semaine */}
+            <div className="mb-4 p-3 bg-base-200 rounded-lg">
+              <label className="label py-0 mb-1">
+                <span className="label-text text-xs font-medium">
+                  Planning de la semaine
+                </span>
+              </label>
+              <select
+                className="select select-bordered select-sm w-full"
+                value={planningSelectionne}
+                onChange={(e) => changerPlanningSemaine(e.target.value)}
+              >
+                <option value="default">Planning par défaut</option>
+                {Object.keys(planningsDisponibles).map((nom) => (
+                  <option key={nom} value={nom}>
+                    {nom}
+                  </option>
+                ))}
+              </select>
+              {planningSelectionne !== "default" && (
+                <p className="text-xs text-info mt-1">
+                  Planning "{planningSelectionne}" appliqué
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               {datesSemaine.map((date) => {
                 const jourSemaine = getJourSemaine(date) as JourSemaine;

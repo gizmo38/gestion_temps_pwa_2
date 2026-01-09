@@ -133,6 +133,13 @@ export function getNumeroSemaine(date: Date): number {
   return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
+// Génère l'identifiant unique d'une semaine (ex: "S2-2026")
+export function getSemaineId(date: Date): string {
+  const numero = getNumeroSemaine(date);
+  const annee = date.getFullYear();
+  return `S${numero}-${annee}`;
+}
+
 // Obtient le lundi de la semaine contenant la date
 export function getLundiSemaine(date: Date): Date {
   const d = new Date(date);

@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   PLANNING: "gestion_temps_planning",
   PLANNINGS_SAUVEGARDES: "gestion_temps_plannings_sauvegardes",
   PARAMETRES: "gestion_temps_parametres",
+  ASSOCIATIONS_SEMAINES: "gestion_temps_associations_semaines",
 };
 
 // Vérifie si on est côté client (navigateur)
@@ -84,6 +85,66 @@ export function deletePlanningSauvegarde(nom: string): void {
   );
 }
 
+// === ASSOCIATIONS SEMAINE-PLANNING ===
+
+// Obtenir toutes les associations semaine-planning
+export function getAssociationsSemaines(): Record<string, string> {
+  if (!isClient) return {};
+  const data = localStorage.getItem(STORAGE_KEYS.ASSOCIATIONS_SEMAINES);
+  return data ? JSON.parse(data) : {};
+}
+
+// Obtenir le planning associé à une semaine spécifique
+export function getAssociationSemaine(semaineId: string): string | null {
+  const associations = getAssociationsSemaines();
+  return associations[semaineId] || null;
+}
+
+// Associer un planning à une semaine
+export function saveAssociationSemaine(
+  semaineId: string,
+  planningNom: string,
+): void {
+  if (!isClient) return;
+  const associations = getAssociationsSemaines();
+  if (planningNom === "default") {
+    // Si "default", on supprime l'association
+    delete associations[semaineId];
+  } else {
+    associations[semaineId] = planningNom;
+  }
+  localStorage.setItem(
+    STORAGE_KEYS.ASSOCIATIONS_SEMAINES,
+    JSON.stringify(associations),
+  );
+}
+
+// Supprimer une association
+export function deleteAssociationSemaine(semaineId: string): void {
+  if (!isClient) return;
+  const associations = getAssociationsSemaines();
+  delete associations[semaineId];
+  localStorage.setItem(
+    STORAGE_KEYS.ASSOCIATIONS_SEMAINES,
+    JSON.stringify(associations),
+  );
+}
+
+// Obtenir le planning effectif pour une semaine (associé ou default)
+export function getPlanningPourSemaine(semaineId: string): PlanningDefault {
+  const planningNom = getAssociationSemaine(semaineId);
+  if (!planningNom) {
+    return getPlanningDefault();
+  }
+  const plannings = getPlanningSauvegardes();
+  // Vérifier que le planning existe toujours
+  if (plannings[planningNom]) {
+    return plannings[planningNom];
+  }
+  // Fallback sur le planning par défaut si le planning n'existe plus
+  return getPlanningDefault();
+}
+
 // === PARAMÈTRES ===
 
 const PARAMETRES_DEFAULT: Parametres = {
@@ -112,6 +173,7 @@ export function exportAllData(): string {
     journees: getJournees(),
     planning: getPlanningDefault(),
     planningsSauvegardes: getPlanningSauvegardes(),
+    associationsSemaines: getAssociationsSemaines(),
     parametres: getParametres(),
   });
 }
@@ -135,6 +197,12 @@ export function importAllData(jsonString: string): boolean {
       localStorage.setItem(
         STORAGE_KEYS.PLANNINGS_SAUVEGARDES,
         JSON.stringify(data.planningsSauvegardes),
+      );
+    }
+    if (data.associationsSemaines) {
+      localStorage.setItem(
+        STORAGE_KEYS.ASSOCIATIONS_SEMAINES,
+        JSON.stringify(data.associationsSemaines),
       );
     }
     if (data.parametres) {

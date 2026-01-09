@@ -5,6 +5,7 @@ import { JourSemaine } from "../lib/types";
 import {
   formatDateISO,
   getNumeroSemaine,
+  getSemaineId,
   getLundiSemaine,
   getDatesSemaine,
   getJourSemaine,
@@ -14,15 +15,28 @@ import {
   getDifferenceClass,
   JOURS_LABELS,
 } from "../lib/utils";
-import { getJournee, getJournees, getPlanningDefault } from "../lib/storage";
+import {
+  getJournee,
+  getJournees,
+  getAssociationSemaine,
+  getPlanningPourSemaine,
+  getPlanningDefault,
+} from "../lib/storage";
+import { PlanningDefault } from "../lib/types";
+import { PLANNING_DEFAULT } from "../lib/utils";
 
 export default function HistoriqueTab() {
   const [dateReference, setDateReference] = useState<Date>(new Date());
-  const [planning, setPlanning] = useState(getPlanningDefault());
+  const [planning, setPlanning] = useState<PlanningDefault>(PLANNING_DEFAULT);
+  const [planningNom, setPlanningNom] = useState<string | null>(null);
 
+  // Charger le planning de la semaine affichée
   useEffect(() => {
-    setPlanning(getPlanningDefault());
-  }, []);
+    const semaineId = getSemaineId(dateReference);
+    const association = getAssociationSemaine(semaineId);
+    setPlanningNom(association);
+    setPlanning(getPlanningPourSemaine(semaineId));
+  }, [dateReference]);
 
   // Changer de semaine
   const changerSemaine = (delta: number) => {
@@ -97,21 +111,28 @@ export default function HistoriqueTab() {
             </div>
           </div>
 
-          <p className="text-sm text-base-content/70">
-            Du{" "}
-            {lundi.toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "long",
-            })}{" "}
-            au{" "}
-            {new Date(
-              lundi.getTime() + 4 * 24 * 60 * 60 * 1000,
-            ).toLocaleDateString("fr-FR", {
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm text-base-content/70">
+              Du{" "}
+              {lundi.toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "long",
+              })}{" "}
+              au{" "}
+              {new Date(
+                lundi.getTime() + 4 * 24 * 60 * 60 * 1000,
+              ).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+            <span
+              className={`badge badge-sm ${planningNom ? "badge-info" : "badge-ghost"}`}
+            >
+              {planningNom ? `Planning: ${planningNom}` : "Planning par défaut"}
+            </span>
+          </div>
 
           {/* Stats globales */}
           <div className="stats stats-vertical sm:stats-horizontal shadow w-full mt-4">
@@ -241,12 +262,12 @@ function HistoriqueSemaines() {
       annee: number;
       totalMinutes: number;
       joursEnregistres: number;
+      planningNom: string | null;
     }[]
   >([]);
 
   useEffect(() => {
     const journees = getJournees();
-    const planning = getPlanningDefault();
 
     // Grouper par semaine
     const semainesMap = new Map<string, { dates: string[]; total: number }>();
@@ -269,11 +290,13 @@ function HistoriqueSemaines() {
     const result = Array.from(semainesMap.entries())
       .map(([lundiISO, data]) => {
         const lundi = new Date(lundiISO);
+        const semaineId = getSemaineId(lundi);
         return {
           numero: getNumeroSemaine(lundi),
           annee: lundi.getFullYear(),
           totalMinutes: data.total,
           joursEnregistres: data.dates.length,
+          planningNom: getAssociationSemaine(semaineId),
         };
       })
       .sort((a, b) => {
@@ -300,11 +323,18 @@ function HistoriqueSemaines() {
           key={`${sem.annee}-${sem.numero}`}
           className="flex items-center justify-between p-3 bg-base-200 rounded-lg"
         >
-          <div>
-            <span className="font-medium">Semaine {sem.numero}</span>
-            <span className="text-sm text-base-content/70 ml-2">
-              ({sem.annee})
-            </span>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Semaine {sem.numero}</span>
+              <span className="text-sm text-base-content/70">
+                ({sem.annee})
+              </span>
+            </div>
+            {sem.planningNom && (
+              <span className="text-xs text-info">
+                Planning: {sem.planningNom}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-base-content/70">

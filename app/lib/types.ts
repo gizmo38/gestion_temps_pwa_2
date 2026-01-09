@@ -50,3 +50,9 @@ export interface ResumeSemaine {
     difference: number;
   }[];
 }
+
+// Association entre une semaine et un planning spécifique
+export interface AssociationSemainePlanning {
+  semaineId: string; // Format "S{numero}-{annee}" ex: "S2-2026"
+  planningNom: string; // Nom du planning sauvegardé ou "default"
+}
