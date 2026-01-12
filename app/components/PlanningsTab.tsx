@@ -30,8 +30,12 @@ export default function PlanningsTab() {
 
   // Charger les données au montage
   useEffect(() => {
-    setPlanning(getPlanningDefault());
-    setPlanningsSauvegardes(getPlanningSauvegardes());
+    (async () => {
+      const defaultPlanning = await getPlanningDefault();
+      setPlanning(defaultPlanning);
+      const saved = await getPlanningSauvegardes();
+      setPlanningsSauvegardes(saved);
+    })();
   }, []);
 
   // Mise à jour d'un horaire
@@ -47,8 +51,8 @@ export default function PlanningsTab() {
   };
 
   // Sauvegarder comme planning par défaut
-  const sauvegarderDefaut = () => {
-    savePlanningDefault(planning);
+  const sauvegarderDefaut = async () => {
+    await savePlanningDefault(planning);
     setMessage({ text: "Planning par défaut enregistré !", type: "success" });
     setTimeout(() => setMessage(null), 3000);
   };
@@ -64,7 +68,7 @@ export default function PlanningsTab() {
   };
 
   // Sauvegarder un planning nommé
-  const sauvegarderNomme = () => {
+  const sauvegarderNomme = async () => {
     if (!nouveauNom.trim()) {
       setMessage({
         text: "Veuillez entrer un nom pour le planning",
@@ -73,8 +77,9 @@ export default function PlanningsTab() {
       setTimeout(() => setMessage(null), 3000);
       return;
     }
-    savePlanningSauvegarde(nouveauNom.trim(), planning);
-    setPlanningsSauvegardes(getPlanningSauvegardes());
+    await savePlanningSauvegarde(nouveauNom.trim(), planning);
+    const saved = await getPlanningSauvegardes();
+    setPlanningsSauvegardes(saved);
     setNouveauNom("");
     setMessage({
       text: `Planning "${nouveauNom.trim()}" sauvegardé !`,
@@ -94,9 +99,10 @@ export default function PlanningsTab() {
   };
 
   // Supprimer un planning sauvegardé
-  const supprimerPlanning = (nom: string) => {
-    deletePlanningSauvegarde(nom);
-    setPlanningsSauvegardes(getPlanningSauvegardes());
+  const supprimerPlanning = async (nom: string) => {
+    await deletePlanningSauvegarde(nom);
+    const saved = await getPlanningSauvegardes();
+    setPlanningsSauvegardes(saved);
     setMessage({ text: `Planning "${nom}" supprimé`, type: "success" });
     setTimeout(() => setMessage(null), 3000);
   };

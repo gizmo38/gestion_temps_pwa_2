@@ -52,26 +52,36 @@ export default function SaisieTab() {
   >({});
   const [planningSelectionne, setPlanningSelectionne] = useState<string>("default");
 
+  // Journées de la semaine
+  const [journeesSemaine, setJourneesSemaine] = useState<Record<string, { totalMinutes: number }>>({});
+
   // Identifiant de la semaine courante
   const semaineId = getSemaineId(dateSelectionnee);
 
   // Charger les plannings disponibles au montage
   useEffect(() => {
-    setPlanningsDisponibles(getPlanningSauvegardes());
+    (async () => {
+      const plannings = await getPlanningSauvegardes();
+      setPlanningsDisponibles(plannings);
+    })();
   }, []);
 
   // Charger le planning de la semaine quand la date change
   useEffect(() => {
-    const association = getAssociationSemaine(semaineId);
-    setPlanningSelectionne(association || "default");
-    setPlanning(getPlanningPourSemaine(semaineId));
+    (async () => {
+      const association = await getAssociationSemaine(semaineId);
+      setPlanningSelectionne(association || "default");
+      const planningPourSemaine = await getPlanningPourSemaine(semaineId);
+      setPlanning(planningPourSemaine);
+    })();
   }, [semaineId]);
 
   // Changer le planning de la semaine
-  const changerPlanningSemaine = (nomPlanning: string) => {
-    saveAssociationSemaine(semaineId, nomPlanning);
+  const changerPlanningSemaine = async (nomPlanning: string) => {
+    await saveAssociationSemaine(semaineId, nomPlanning);
     setPlanningSelectionne(nomPlanning);
-    setPlanning(getPlanningPourSemaine(semaineId));
+    const planningPourSemaine = await getPlanningPourSemaine(semaineId);
+    setPlanning(planningPourSemaine);
     setMessage({
       text: `Planning "${nomPlanning === "default" ? "par défaut" : nomPlanning}" appliqué à la semaine ${getNumeroSemaine(dateSelectionnee)}`,
       type: "success",
@@ -81,19 +91,39 @@ export default function SaisieTab() {
 
   // Charger les horaires quand la date change
   useEffect(() => {
-    const dateISO = formatDateISO(dateSelectionnee);
-    const journeeSauvegardee = getJournee(dateISO);
+    (async () => {
+      const dateISO = formatDateISO(dateSelectionnee);
+      const journeeSauvegardee = await getJournee(dateISO);
 
-    if (journeeSauvegardee) {
-      setHoraires(journeeSauvegardee.horaires);
-    } else {
-      // Charger depuis le planning par défaut
-      const jour = getJourSemaine(dateSelectionnee);
-      if (jour && planning[jour]) {
-        setHoraires(planning[jour]);
+      if (journeeSauvegardee) {
+        setHoraires(journeeSauvegardee.horaires);
+      } else {
+        // Charger depuis le planning par défaut
+        const jour = getJourSemaine(dateSelectionnee);
+        if (jour && planning[jour]) {
+          setHoraires(planning[jour]);
+        }
       }
-    }
+    })();
   }, [dateSelectionnee, planning]);
+
+  // Charger les journées de la semaine
+  useEffect(() => {
+    (async () => {
+      const dates = getDatesSemaine(dateSelectionnee);
+      const journees: Record<string, { totalMinutes: number }> = {};
+
+      for (const date of dates) {
+        const dateISO = formatDateISO(date);
+        const journee = await getJournee(dateISO);
+        if (journee) {
+          journees[dateISO] = { totalMinutes: journee.totalMinutes };
+        }
+      }
+
+      setJourneesSemaine(journees);
+    })();
+  }, [dateSelectionnee]);
 
   // Changer de jour
   const changerJour = (delta: number) => {
@@ -113,11 +143,11 @@ export default function SaisieTab() {
   };
 
   // Enregistrer la journée
-  const enregistrerJournee = () => {
+  const enregistrerJournee = async () => {
     const totalMinutes = calculerTotalJournee(horaires);
     const dateISO = formatDateISO(dateSelectionnee);
 
-    saveJournee({
+    await saveJournee({
       date: dateISO,
       horaires,
       totalMinutes,
@@ -360,7 +390,7 @@ export default function SaisieTab() {
               {datesSemaine.map((date) => {
                 const jourSemaine = getJourSemaine(date) as JourSemaine;
                 const dateISO = formatDateISO(date);
-                const journee = getJournee(dateISO);
+                const journee = journeesSemaine[dateISO];
                 const isToday = estAujourdhui(date);
                 const isSelected =
                   formatDateISO(date) === formatDateISO(dateSelectionnee);

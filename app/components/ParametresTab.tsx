@@ -22,7 +22,10 @@ export default function ParametresTab() {
 
   // Charger les paramètres au montage
   useEffect(() => {
-    setParametres(getParametres());
+    (async () => {
+      const params = await getParametres();
+      setParametres(params);
+    })();
   }, []);
 
   // Appliquer le thème
@@ -36,18 +39,18 @@ export default function ParametresTab() {
   }, [parametres.theme]);
 
   // Mettre à jour un paramètre
-  const updateParametre = <K extends keyof Parametres>(
+  const updateParametre = async <K extends keyof Parametres>(
     key: K,
     value: Parametres[K],
   ) => {
     const newParams = { ...parametres, [key]: value };
     setParametres(newParams);
-    saveParametres(newParams);
+    await saveParametres(newParams);
   };
 
   // Exporter les données
-  const handleExport = () => {
-    const data = exportAllData();
+  const handleExport = async () => {
+    const data = await exportAllData();
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -65,9 +68,9 @@ export default function ParametresTab() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const content = e.target?.result as string;
-      const success = importAllData(content);
+      const success = await importAllData(content);
       if (success) {
         setMessage({
           text: "Données importées avec succès ! Rechargez la page.",

@@ -29,13 +29,25 @@ export default function HistoriqueTab() {
   const [dateReference, setDateReference] = useState<Date>(new Date());
   const [planning, setPlanning] = useState<PlanningDefault>(PLANNING_DEFAULT);
   const [planningNom, setPlanningNom] = useState<string | null>(null);
+  const [statsJours, setStatsJours] = useState<{
+    date: Date;
+    dateISO: string;
+    jourSemaine: JourSemaine;
+    realise: number;
+    prevu: number;
+    difference: number;
+    enregistre: boolean;
+  }[]>([]);
 
   // Charger le planning de la semaine affichée
   useEffect(() => {
-    const semaineId = getSemaineId(dateReference);
-    const association = getAssociationSemaine(semaineId);
-    setPlanningNom(association);
-    setPlanning(getPlanningPourSemaine(semaineId));
+    (async () => {
+      const semaineId = getSemaineId(dateReference);
+      const association = await getAssociationSemaine(semaineId);
+      setPlanningNom(association);
+      const planningPourSemaine = await getPlanningPourSemaine(semaineId);
+      setPlanning(planningPourSemaine);
+    })();
   }, [dateReference]);
 
   // Changer de semaine
@@ -56,24 +68,31 @@ export default function HistoriqueTab() {
   const lundi = getLundiSemaine(dateReference);
 
   // Calculer les stats de la semaine
-  const statsJours = datesSemaine.map((date) => {
-    const jourSemaine = getJourSemaine(date) as JourSemaine;
-    const dateISO = formatDateISO(date);
-    const journee = getJournee(dateISO);
-    const prevu = calculerTotalJournee(planning[jourSemaine]);
-    const realise = journee ? journee.totalMinutes : 0;
-    const difference = realise - prevu;
+  useEffect(() => {
+    (async () => {
+      const stats = await Promise.all(
+        datesSemaine.map(async (date) => {
+          const jourSemaine = getJourSemaine(date) as JourSemaine;
+          const dateISO = formatDateISO(date);
+          const journee = await getJournee(dateISO);
+          const prevu = calculerTotalJournee(planning[jourSemaine]);
+          const realise = journee ? journee.totalMinutes : 0;
+          const difference = realise - prevu;
 
-    return {
-      date,
-      dateISO,
-      jourSemaine,
-      realise,
-      prevu,
-      difference,
-      enregistre: !!journee,
-    };
-  });
+          return {
+            date,
+            dateISO,
+            jourSemaine,
+            realise,
+            prevu,
+            difference,
+            enregistre: !!journee,
+          };
+        })
+      );
+      setStatsJours(stats);
+    })();
+  }, [dateReference, planning]);
 
   const totalRealise = statsJours.reduce((acc, j) => acc + j.realise, 0);
   const totalPrevu = statsJours.reduce((acc, j) => acc + j.prevu, 0);
@@ -267,45 +286,50 @@ function HistoriqueSemaines() {
   >([]);
 
   useEffect(() => {
-    const journees = getJournees();
+    (async () => {
+      const journees = await getJournees();
 
-    // Grouper par semaine
-    const semainesMap = new Map<string, { dates: string[]; total: number }>();
+      // Grouper par semaine
+      const semainesMap = new Map<string, { dates: string[]; total: number }>();
 
-    Object.keys(journees).forEach((dateISO) => {
-      const date = new Date(dateISO);
-      const lundi = getLundiSemaine(date);
-      const key = formatDateISO(lundi);
+      Object.keys(journees).forEach((dateISO) => {
+        const date = new Date(dateISO);
+        const lundi = getLundiSemaine(date);
+        const key = formatDateISO(lundi);
 
-      if (!semainesMap.has(key)) {
-        semainesMap.set(key, { dates: [], total: 0 });
-      }
+        if (!semainesMap.has(key)) {
+          semainesMap.set(key, { dates: [], total: 0 });
+        }
 
-      const sem = semainesMap.get(key)!;
-      sem.dates.push(dateISO);
-      sem.total += journees[dateISO].totalMinutes;
-    });
+        const sem = semainesMap.get(key)!;
+        sem.dates.push(dateISO);
+        sem.total += journees[dateISO].totalMinutes;
+      });
 
-    // Convertir en tableau
-    const result = Array.from(semainesMap.entries())
-      .map(([lundiISO, data]) => {
-        const lundi = new Date(lundiISO);
-        const semaineId = getSemaineId(lundi);
-        return {
-          numero: getNumeroSemaine(lundi),
-          annee: lundi.getFullYear(),
-          totalMinutes: data.total,
-          joursEnregistres: data.dates.length,
-          planningNom: getAssociationSemaine(semaineId),
-        };
-      })
-      .sort((a, b) => {
-        if (a.annee !== b.annee) return b.annee - a.annee;
-        return b.numero - a.numero;
-      })
-      .slice(0, 10); // Limiter aux 10 dernières semaines
+      // Convertir en tableau
+      const result = await Promise.all(
+        Array.from(semainesMap.entries()).map(async ([lundiISO, data]) => {
+          const lundi = new Date(lundiISO);
+          const semaineId = getSemaineId(lundi);
+          return {
+            numero: getNumeroSemaine(lundi),
+            annee: lundi.getFullYear(),
+            totalMinutes: data.total,
+            joursEnregistres: data.dates.length,
+            planningNom: await getAssociationSemaine(semaineId),
+          };
+        })
+      );
 
-    setSemaines(result);
+      const sorted = result
+        .sort((a, b) => {
+          if (a.annee !== b.annee) return b.annee - a.annee;
+          return b.numero - a.numero;
+        })
+        .slice(0, 10); // Limiter aux 10 dernières semaines
+
+      setSemaines(sorted);
+    })();
   }, []);
 
   if (semaines.length === 0) {
