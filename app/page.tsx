@@ -6,6 +6,7 @@ import SaisieTab from "./components/SaisieTab";
 import PlanningsTab from "./components/PlanningsTab";
 import HistoriqueTab from "./components/HistoriqueTab";
 import ParametresTab from "./components/ParametresTab";
+import MigrationHandler from "./components/MigrationHandler";
 import { formatDateLong, getNumeroSemaine } from "./lib/utils";
 
 export default function Home() {
@@ -37,6 +38,9 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-base-200">
+      {/* Gestionnaire de migration localStorage → IndexedDB */}
+      <MigrationHandler />
+
       <div className="container mx-auto px-4 py-6 max-w-6xl">
         {/* Header */}
         <header className="navbar bg-base-100 rounded-box shadow-sm mb-6">
