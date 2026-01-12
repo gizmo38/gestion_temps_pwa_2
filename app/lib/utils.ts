@@ -190,3 +190,66 @@ export function formatDifference(minutes: number): string {
   const signe = minutes > 0 ? "+" : "";
   return signe + minutesEnHeures(minutes);
 }
+
+// Type pour les statistiques d'un jour
+export interface StatsJour {
+  date: Date;
+  dateISO: string;
+  jourSemaine: JourSemaine;
+  realise: number;
+  prevu: number;
+  difference: number;
+  enregistre: boolean;
+}
+
+// Type pour les statistiques hebdomadaires
+export interface StatsHebdo {
+  totalRealise: number;
+  totalPrevu: number;
+  totalDifference: number;
+  joursSaisis: number;
+  joursTotal: number;
+  jours: StatsJour[];
+}
+
+// Calcule les statistiques d'une semaine complète
+export function calculerStatsSemaine(
+  datesSemaine: Date[],
+  planning: PlanningDefault,
+  journeesSemaine: Record<string, { totalMinutes: number }>,
+): StatsHebdo {
+  const jours: StatsJour[] = [];
+
+  for (const date of datesSemaine) {
+    const jourSemaine = getJourSemaine(date) as JourSemaine;
+    const dateISO = formatDateISO(date);
+    const journee = journeesSemaine[dateISO];
+    const prevu = calculerTotalJournee(planning[jourSemaine]);
+    const realise = journee ? journee.totalMinutes : 0;
+    const difference = realise - prevu;
+
+    jours.push({
+      date,
+      dateISO,
+      jourSemaine,
+      realise,
+      prevu,
+      difference,
+      enregistre: !!journee,
+    });
+  }
+
+  const totalRealise = jours.reduce((acc, j) => acc + j.realise, 0);
+  const totalPrevu = jours.reduce((acc, j) => acc + j.prevu, 0);
+  const totalDifference = totalRealise - totalPrevu;
+  const joursSaisis = jours.filter((j) => j.enregistre).length;
+
+  return {
+    totalRealise,
+    totalPrevu,
+    totalDifference,
+    joursSaisis,
+    joursTotal: jours.length,
+    jours,
+  };
+}

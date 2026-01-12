@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { HorairesJour, JourSemaine } from "../lib/types";
+import { HorairesJour } from "../lib/types";
 import {
   formatDateISO,
   formatDateLong,
@@ -16,6 +16,8 @@ import {
   getDatesSemaine,
   JOURS_LABELS,
   PLANNING_DEFAULT,
+  calculerStatsSemaine,
+  StatsHebdo,
 } from "../lib/utils";
 import {
   getJournee,
@@ -26,8 +28,12 @@ import {
   getPlanningPourSemaine,
 } from "../lib/storage";
 import { PlanningDefault } from "../lib/types";
+import { useSalarie } from "../lib/SalarieContext";
 
 export default function SaisieTab() {
+  // Contexte salarié
+  const { salarieActif } = useSalarie();
+
   // Date sélectionnée
   const [dateSelectionnee, setDateSelectionnee] = useState<Date>(new Date());
 
@@ -92,11 +98,12 @@ export default function SaisieTab() {
     setTimeout(() => setMessage(null), 3000);
   };
 
-  // Charger les horaires quand la date change
+  // Charger les horaires quand la date ou le salarié change
   useEffect(() => {
     (async () => {
       const dateISO = formatDateISO(dateSelectionnee);
-      const journeeSauvegardee = await getJournee(dateISO);
+      const salarieId = salarieActif?.id || "default";
+      const journeeSauvegardee = await getJournee(dateISO, salarieId);
 
       if (journeeSauvegardee) {
         setHoraires(journeeSauvegardee.horaires);
@@ -108,17 +115,18 @@ export default function SaisieTab() {
         }
       }
     })();
-  }, [dateSelectionnee, planning]);
+  }, [dateSelectionnee, planning, salarieActif]);
 
-  // Charger les journées de la semaine
+  // Charger les journées de la semaine pour le salarié actif
   useEffect(() => {
     (async () => {
       const dates = getDatesSemaine(dateSelectionnee);
       const journees: Record<string, { totalMinutes: number }> = {};
+      const salarieId = salarieActif?.id || "default";
 
       for (const date of dates) {
         const dateISO = formatDateISO(date);
-        const journee = await getJournee(dateISO);
+        const journee = await getJournee(dateISO, salarieId);
         if (journee) {
           journees[dateISO] = { totalMinutes: journee.totalMinutes };
         }
@@ -126,7 +134,7 @@ export default function SaisieTab() {
 
       setJourneesSemaine(journees);
     })();
-  }, [dateSelectionnee]);
+  }, [dateSelectionnee, salarieActif]);
 
   // Changer de jour
   const changerJour = (delta: number) => {
@@ -149,8 +157,10 @@ export default function SaisieTab() {
   const enregistrerJournee = async () => {
     const totalMinutes = calculerTotalJournee(horaires);
     const dateISO = formatDateISO(dateSelectionnee);
+    const salarieId = salarieActif?.id || "default";
 
     await saveJournee({
+      salarieId,
       date: dateISO,
       horaires,
       totalMinutes,
@@ -185,12 +195,36 @@ export default function SaisieTab() {
   // Dates de la semaine pour le récap
   const datesSemaine = getDatesSemaine(dateSelectionnee);
 
+  // Calculer les stats hebdomadaires
+  const statsHebdo: StatsHebdo = calculerStatsSemaine(
+    datesSemaine,
+    planning,
+    journeesSemaine,
+  );
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Carte Saisie des horaires */}
       <div className="card bg-base-100 shadow-sm">
         <div className="card-body">
-          <h2 className="card-title text-lg">Saisie des Horaires</h2>
+          {/* En-tête avec titre et sélecteur de planning */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="card-title text-lg">Saisie des Horaires</h2>
+            <div className="flex items-center gap-2">
+              <select
+                className="select select-bordered select-xs"
+                value={planningSelectionne}
+                onChange={(e) => changerPlanningSemaine(e.target.value)}
+              >
+                <option value="default">Planning par défaut</option>
+                {Object.keys(planningsDisponibles).map((nom) => (
+                  <option key={nom} value={nom}>
+                    {nom}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           {/* Navigation de date */}
           <div className="flex flex-col gap-2">
@@ -333,26 +367,25 @@ export default function SaisieTab() {
       {/* Carte Résumé du jour */}
       <div className="card bg-base-100 shadow-sm">
         <div className="card-body">
-          <h2 className="card-title text-lg">Résumé du Jour</h2>
-
-          {/* Stats du jour */}
-          <div className="stats stats-vertical sm:stats-horizontal shadow w-full">
-            <div className="stat py-3 px-4">
+          {/* Stats du jour - compactées */}
+          <h2 className="card-title text-lg mb-2">Résumé du Jour</h2>
+          <div className="stats stats-vertical sm:stats-horizontal shadow-sm w-full mb-3">
+            <div className="stat py-2 px-3">
               <div className="stat-title text-xs">Total</div>
-              <div className="stat-value text-xl font-mono text-primary">
+              <div className="stat-value text-lg font-mono text-primary">
                 {minutesEnHeures(totalMinutes)}
               </div>
             </div>
-            <div className="stat py-3 px-4">
+            <div className="stat py-2 px-3">
               <div className="stat-title text-xs">Prévu</div>
-              <div className="stat-value text-xl font-mono">
+              <div className="stat-value text-lg font-mono">
                 {minutesEnHeures(prevuMinutes)}
               </div>
             </div>
-            <div className="stat py-3 px-4">
+            <div className="stat py-2 px-3">
               <div className="stat-title text-xs">Différence</div>
               <div
-                className={`stat-value text-xl font-mono ${getDifferenceClass(differenceMinutes)}`}
+                className={`stat-value text-lg font-mono ${getDifferenceClass(differenceMinutes)}`}
               >
                 {formatDifference(differenceMinutes)}
               </div>
@@ -361,80 +394,103 @@ export default function SaisieTab() {
 
           <div className="divider my-2"></div>
 
-          {/* Récap par jour de la semaine */}
-          <div>
-            <h3 className="text-sm font-medium mb-3 flex items-center justify-between">
-              Récap Semaine
-              <span className="badge badge-outline badge-sm">
-                S{getNumeroSemaine(dateSelectionnee)}
-              </span>
-            </h3>
-
-            {/* Sélecteur de planning pour la semaine */}
-            <div className="mb-4 p-3 bg-base-200 rounded-lg">
-              <label className="label py-0 mb-1">
-                <span className="label-text text-xs font-medium">
-                  Planning de la semaine
-                </span>
-              </label>
-              <select
-                className="select select-bordered select-sm w-full"
-                value={planningSelectionne}
-                onChange={(e) => changerPlanningSemaine(e.target.value)}
-              >
-                <option value="default">Planning par défaut</option>
-                {Object.keys(planningsDisponibles).map((nom) => (
-                  <option key={nom} value={nom}>
-                    {nom}
-                  </option>
-                ))}
-              </select>
-              {planningSelectionne !== "default" && (
-                <p className="text-xs text-info mt-1">
-                  Planning &quot;{planningSelectionne}&quot; appliqué
-                </p>
-              )}
-            </div>
+          {/* Détail par jour - REMONTÉ EN HAUT */}
+          <div className="mb-4">
+            <h3 className="text-sm font-medium mb-3">Détail par jour</h3>
             <div className="space-y-2">
-              {datesSemaine.map((date) => {
-                const jourSemaine = getJourSemaine(date) as JourSemaine;
-                const dateISO = formatDateISO(date);
-                const journee = journeesSemaine[dateISO];
-                const isToday = estAujourdhui(date);
+              {statsHebdo.jours.map((jour) => {
+                const isToday = estAujourdhui(jour.date);
                 const isSelected =
-                  formatDateISO(date) === formatDateISO(dateSelectionnee);
+                  jour.dateISO === formatDateISO(dateSelectionnee);
 
                 return (
                   <div
-                    key={dateISO}
+                    key={jour.dateISO}
                     className={`flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
                       isSelected
                         ? "bg-primary/10 ring-2 ring-primary"
                         : "bg-base-200 hover:bg-base-300"
                     }`}
-                    onClick={() => setDateSelectionnee(date)}
+                    onClick={() => setDateSelectionnee(jour.date)}
                   >
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">
-                        {JOURS_LABELS[jourSemaine]}
+                        {JOURS_LABELS[jour.jourSemaine]}
                         {isToday && ` (Aujourd'hui)`}
                       </span>
                       <span className="text-xs text-base-content/60">
-                        {date.toLocaleDateString("fr-FR", {
+                        {jour.date.toLocaleDateString("fr-FR", {
                           day: "2-digit",
                           month: "2-digit",
                         })}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      {jour.enregistre && (
+                        <span
+                          className={`badge badge-sm ${jour.difference >= 0 ? "badge-success" : "badge-error"}`}
+                        >
+                          {formatDifference(jour.difference)}
+                        </span>
+                      )}
                       <span className="font-mono text-sm">
-                        {journee ? minutesEnHeures(journee.totalMinutes) : "--"}
+                        {jour.enregistre ? minutesEnHeures(jour.realise) : "--"}
                       </span>
                     </div>
                   </div>
                 );
               })}
             </div>
+          </div>
+
+          {/* Bilan Hebdomadaire - en bas de la 2ème colonne */}
+          <div className="p-4 bg-gradient-to-br from-base-200 to-base-300 rounded-lg">
+            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+              <span>📊</span>
+              <span>Bilan Semaine S{getNumeroSemaine(dateSelectionnee)}</span>
+            </h3>
+
+            {/* Stats hebdomadaires compactées */}
+            <div className="stats stats-vertical sm:stats-horizontal shadow-sm w-full bg-base-100 rounded-lg mb-3">
+              <div className="stat py-2 px-3">
+                <div className="stat-title text-xs">Total Réalisé</div>
+                <div className="stat-value text-base font-mono text-primary">
+                  {minutesEnHeures(statsHebdo.totalRealise)}
+                </div>
+              </div>
+              <div className="stat py-2 px-3">
+                <div className="stat-title text-xs">Total Prévu</div>
+                <div className="stat-value text-base font-mono">
+                  {minutesEnHeures(statsHebdo.totalPrevu)}
+                </div>
+              </div>
+              <div className="stat py-2 px-3">
+                <div className="stat-title text-xs">Heures Sup</div>
+                <div
+                  className={`stat-value text-base font-mono ${getDifferenceClass(statsHebdo.totalDifference)}`}
+                >
+                  {statsHebdo.totalDifference > 0
+                    ? "▲ "
+                    : statsHebdo.totalDifference < 0
+                      ? "▼ "
+                      : ""}
+                  {formatDifference(statsHebdo.totalDifference)}
+                </div>
+              </div>
+            </div>
+
+            {/* Barre de progression compacte */}
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-base-content/70">Jours saisis</span>
+              <span className="font-medium">
+                {statsHebdo.joursSaisis} / {statsHebdo.joursTotal}
+              </span>
+            </div>
+            <progress
+              className="progress progress-primary w-full h-2"
+              value={statsHebdo.joursSaisis}
+              max={statsHebdo.joursTotal}
+            ></progress>
           </div>
         </div>
       </div>

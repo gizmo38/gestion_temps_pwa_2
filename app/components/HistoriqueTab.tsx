@@ -17,27 +17,32 @@ import {
 } from "../lib/utils";
 import {
   getJournee,
-  getJournees,
+  getJourneesSalarie,
   getAssociationSemaine,
   getPlanningPourSemaine,
-  getPlanningDefault,
 } from "../lib/storage";
 import { PlanningDefault } from "../lib/types";
 import { PLANNING_DEFAULT } from "../lib/utils";
+import { useSalarie } from "../lib/SalarieContext";
 
 export default function HistoriqueTab() {
+  // Contexte salarié
+  const { salarieActif } = useSalarie();
+
   const [dateReference, setDateReference] = useState<Date>(new Date());
   const [planning, setPlanning] = useState<PlanningDefault>(PLANNING_DEFAULT);
   const [planningNom, setPlanningNom] = useState<string | null>(null);
-  const [statsJours, setStatsJours] = useState<{
-    date: Date;
-    dateISO: string;
-    jourSemaine: JourSemaine;
-    realise: number;
-    prevu: number;
-    difference: number;
-    enregistre: boolean;
-  }[]>([]);
+  const [statsJours, setStatsJours] = useState<
+    {
+      date: Date;
+      dateISO: string;
+      jourSemaine: JourSemaine;
+      realise: number;
+      prevu: number;
+      difference: number;
+      enregistre: boolean;
+    }[]
+  >([]);
 
   // Charger le planning de la semaine affichée
   useEffect(() => {
@@ -70,11 +75,12 @@ export default function HistoriqueTab() {
   // Calculer les stats de la semaine
   useEffect(() => {
     (async () => {
+      const salarieId = salarieActif?.id || "default";
       const stats = await Promise.all(
         datesSemaine.map(async (date) => {
           const jourSemaine = getJourSemaine(date) as JourSemaine;
           const dateISO = formatDateISO(date);
-          const journee = await getJournee(dateISO);
+          const journee = await getJournee(dateISO, salarieId);
           const prevu = calculerTotalJournee(planning[jourSemaine]);
           const realise = journee ? journee.totalMinutes : 0;
           const difference = realise - prevu;
@@ -88,11 +94,11 @@ export default function HistoriqueTab() {
             difference,
             enregistre: !!journee,
           };
-        })
+        }),
       );
       setStatsJours(stats);
     })();
-  }, [dateReference, planning]);
+  }, [dateReference, planning, datesSemaine, salarieActif]);
 
   const totalRealise = statsJours.reduce((acc, j) => acc + j.realise, 0);
   const totalPrevu = statsJours.reduce((acc, j) => acc + j.prevu, 0);
@@ -168,13 +174,30 @@ export default function HistoriqueTab() {
               </div>
             </div>
             <div className="stat">
-              <div className="stat-title">Différence</div>
+              <div className="stat-title">Heures Sup</div>
               <div
                 className={`stat-value font-mono ${getDifferenceClass(totalDifference)}`}
               >
+                {totalDifference > 0 ? "▲ " : totalDifference < 0 ? "▼ " : ""}
                 {formatDifference(totalDifference)}
               </div>
             </div>
+          </div>
+
+          {/* Barre de progression */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="text-base-content/70">Jours saisis</span>
+              <span className="font-medium">
+                {statsJours.filter((j) => j.enregistre).length} /{" "}
+                {statsJours.length}
+              </span>
+            </div>
+            <progress
+              className="progress progress-primary w-full"
+              value={statsJours.filter((j) => j.enregistre).length}
+              max={statsJours.length}
+            ></progress>
           </div>
 
           {/* Tableau détaillé */}
@@ -208,17 +231,21 @@ export default function HistoriqueTab() {
                     <td className="font-mono text-base-content/70">
                       {minutesEnHeures(jour.prevu)}
                     </td>
-                    <td
-                      className={`font-mono ${getDifferenceClass(jour.difference)}`}
-                    >
-                      {jour.enregistre
-                        ? formatDifference(jour.difference)
-                        : "--"}
+                    <td>
+                      {jour.enregistre ? (
+                        <span
+                          className={`badge badge-sm ${jour.difference >= 0 ? "badge-success" : "badge-error"}`}
+                        >
+                          {formatDifference(jour.difference)}
+                        </span>
+                      ) : (
+                        <span className="text-base-content/50">--</span>
+                      )}
                     </td>
                     <td>
                       {jour.enregistre ? (
                         <span className="badge badge-success badge-sm">
-                          Enregistré
+                          ✓ Enregistré
                         </span>
                       ) : (
                         <span className="badge badge-ghost badge-sm">
@@ -236,10 +263,12 @@ export default function HistoriqueTab() {
                     {minutesEnHeures(totalRealise)}
                   </td>
                   <td className="font-mono">{minutesEnHeures(totalPrevu)}</td>
-                  <td
-                    className={`font-mono ${getDifferenceClass(totalDifference)}`}
-                  >
-                    {formatDifference(totalDifference)}
+                  <td>
+                    <span
+                      className={`badge badge-sm ${totalDifference >= 0 ? "badge-success" : "badge-error"}`}
+                    >
+                      {formatDifference(totalDifference)}
+                    </span>
                   </td>
                   <td></td>
                 </tr>
@@ -287,13 +316,14 @@ function HistoriqueSemaines() {
 
   useEffect(() => {
     (async () => {
-      const journees = await getJournees();
+      const salarieId = salarieActif?.id || "default";
+      const journees = await getJourneesSalarie(salarieId);
 
       // Grouper par semaine
       const semainesMap = new Map<string, { dates: string[]; total: number }>();
 
-      Object.keys(journees).forEach((dateISO) => {
-        const date = new Date(dateISO);
+      journees.forEach((journee) => {
+        const date = new Date(journee.date);
         const lundi = getLundiSemaine(date);
         const key = formatDateISO(lundi);
 
@@ -302,8 +332,8 @@ function HistoriqueSemaines() {
         }
 
         const sem = semainesMap.get(key)!;
-        sem.dates.push(dateISO);
-        sem.total += journees[dateISO].totalMinutes;
+        sem.dates.push(journee.date);
+        sem.total += journee.totalMinutes;
       });
 
       // Convertir en tableau
@@ -318,7 +348,7 @@ function HistoriqueSemaines() {
             joursEnregistres: data.dates.length,
             planningNom: await getAssociationSemaine(semaineId),
           };
-        })
+        }),
       );
 
       const sorted = result
@@ -330,7 +360,8 @@ function HistoriqueSemaines() {
 
       setSemaines(sorted);
     })();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [salarieActif?.id]);
 
   if (semaines.length === 0) {
     return (
