@@ -50,10 +50,13 @@ export default function SaisieTab() {
   const [planningsDisponibles, setPlanningsDisponibles] = useState<
     Record<string, PlanningDefault>
   >({});
-  const [planningSelectionne, setPlanningSelectionne] = useState<string>("default");
+  const [planningSelectionne, setPlanningSelectionne] =
+    useState<string>("default");
 
   // Journées de la semaine
-  const [journeesSemaine, setJourneesSemaine] = useState<Record<string, { totalMinutes: number }>>({});
+  const [journeesSemaine, setJourneesSemaine] = useState<
+    Record<string, { totalMinutes: number }>
+  >({});
 
   // Identifiant de la semaine courante
   const semaineId = getSemaineId(dateSelectionnee);
@@ -152,6 +155,12 @@ export default function SaisieTab() {
       horaires,
       totalMinutes,
     });
+
+    // Rafraîchir l'affichage du récap semaine
+    setJourneesSemaine((prev) => ({
+      ...prev,
+      [dateISO]: { totalMinutes },
+    }));
 
     setMessage({ text: "Journée enregistrée !", type: "success" });
     setTimeout(() => setMessage(null), 3000);
@@ -382,7 +391,7 @@ export default function SaisieTab() {
               </select>
               {planningSelectionne !== "default" && (
                 <p className="text-xs text-info mt-1">
-                  Planning "{planningSelectionne}" appliqué
+                  Planning &quot;{planningSelectionne}&quot; appliqué
                 </p>
               )}
             </div>
@@ -408,7 +417,7 @@ export default function SaisieTab() {
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">
                         {JOURS_LABELS[jourSemaine]}
-                        {isToday && " (Aujourd'hui)"}
+                        {isToday && ` (Aujourd'hui)`}
                       </span>
                       <span className="text-xs text-base-content/60">
                         {date.toLocaleDateString("fr-FR", {
